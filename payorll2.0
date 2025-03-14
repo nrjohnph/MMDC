@@ -1,0 +1,178 @@
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.io.*;
+import java.text.DecimalFormat;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.time.format.DateTimeParseException;
+
+public class MotorPhPayrollSystem {
+    public static void main(String[] args) {
+        String filePath = "src/MotorPH_Employee_Data.xlsx";
+        try (Scanner scanner = new Scanner(System.in)) {
+            System.out.print("Enter Employee Number: ");
+            int empNumberInput = scanner.nextInt();
+            
+            readEmployeeDetails(filePath, empNumberInput);
+        }
+    }
+
+    public static void readEmployeeDetails(String filePath, int empNumberInput) {
+        try (FileInputStream fis = new FileInputStream(new File(filePath));
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet1 = workbook.getSheet("Employee Details");
+            Sheet sheet2 = workbook.getSheet("Attendance Record");
+
+            if (sheet1 == null || sheet2 == null) {
+                System.out.println("One or more sheets not found.");
+                return;
+            }
+
+            boolean found = false;
+
+            for (Row row : sheet1) {
+                if (row.getRowNum() == 0) continue;
+                Cell empNumberCell = row.getCell(0);
+                if (empNumberCell == null || empNumberCell.getCellType() != CellType.NUMERIC) continue;
+                int empNumber = (int) empNumberCell.getNumericCellValue();
+
+                if (empNumber == empNumberInput) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                System.out.println("Employee not found.");
+                return;
+            }
+
+            Map<String, Double> weeklyHours = new HashMap<>();
+            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+            DateTimeFormatter[] possibleFormats = {
+                DateTimeFormatter.ofPattern("HH:mm"),
+                DateTimeFormatter.ofPattern("H:mm"),
+                DateTimeFormatter.ofPattern("hh:mm a")
+            };
+
+            for (Row row : sheet2) {
+                if (row.getRowNum() == 0) continue;
+                Cell empNumberCell = row.getCell(0);
+                if (empNumberCell == null || empNumberCell.getCellType() != CellType.NUMERIC) continue;
+                int empNumber = (int) empNumberCell.getNumericCellValue();
+                if (empNumber != empNumberInput) continue;
+
+                DataFormatter formatter = new DataFormatter();
+                String dateStr = formatter.formatCellValue(row.getCell(3));
+                String timeInStr = formatter.formatCellValue(row.getCell(4));
+                String timeOutStr = formatter.formatCellValue(row.getCell(5));
+
+                LocalDate date;
+                try {
+                    date = LocalDate.parse(dateStr, dateFormatter);
+                } catch (DateTimeParseException e) {
+                    continue;
+                }
+
+                String weekKey = date.with(java.time.DayOfWeek.MONDAY).toString() + " - " + date.with(java.time.DayOfWeek.FRIDAY).toString();
+
+                LocalTime timeIn = null, timeOut = null;
+                for (DateTimeFormatter format : possibleFormats) {
+                    try {
+                        timeIn = LocalTime.parse(timeInStr, format);
+                        timeOut = LocalTime.parse(timeOutStr, format);
+                        break;
+                    } catch (DateTimeParseException ignored) {}
+                }
+
+                if (timeIn == null || timeOut == null) continue;
+                double hoursWorked = (double) java.time.Duration.between(timeIn, timeOut).toMinutes() / 60;
+
+                weeklyHours.put(weekKey, weeklyHours.getOrDefault(weekKey, 0.0) + hoursWorked);
+            }
+
+            System.out.println("\n--- Total Weekly Working Hours ---");
+            for (Map.Entry<String, Double> entry : weeklyHours.entrySet()) {
+                System.out.println(entry.getKey() + ": " + String.format("%.2f", entry.getValue()) + " hours");
+            }
+            System.out.println("------------------------------------------");
+
+        } catch (IOException e) {
+            System.out.println("Error reading file: " + e.getMessage());
+        }
+    }
+}
+
+
+    private static void displayEmployeeDetails(Row row) {
+        System.out.println("Employee #: " + (int) row.getCell(0).getNumericCellValue());
+        System.out.println("Name: " + row.getCell(2).getStringCellValue() + " " + row.getCell(1).getStringCellValue());
+        System.out.println("Position: " + row.getCell(11).toString());
+        System.out.println("Birthday: " + row.getCell(3).toString());
+        System.out.println("Address: " + row.getCell(4).toString());
+        System.out.println("Phone Number: " + row.getCell(5).toString());
+
+        printWholeNumber(row.getCell(6), "SSS Number");
+        printWholeNumber(row.getCell(7), "PhilHealth Number");
+        printWholeNumber(row.getCell(8), "TIN Number");
+        printWholeNumber(row.getCell(9), "PagIbig Number");
+
+        System.out.println("------------------------------------------");
+        printAllowances(row);
+    }
+
+    private static void printWholeNumber(Cell cell, String label) {
+        if (cell != null) {
+            System.out.println(label + ": " + (cell.getCellType() == CellType.NUMERIC ? (long) cell.getNumericCellValue() : cell.toString()));
+        }
+    }
+
+    private static void printAllowances(Row row) {
+        System.out.println("Allowances:");
+        System.out.println("------------------------------------------");
+        System.out.println("Rice Subsidy: " + row.getCell(14).toString());
+        System.out.println("Phone Allowance: " + row.getCell(15).toString());
+        System.out.println("Clothing Allowance: " + row.getCell(16).toString());
+        System.out.println("------------------------------------------");
+    }
+
+    private static double calculateSSS(double salary) {
+        return Math.min(1125.00, Math.max(135.00, Math.ceil((salary - 3250) / 500) * 22.50 + 135));
+    }
+
+    private static double calculatePhilHealth(double salary) {
+        return salary <= 10000 ? 300.00 : Math.min(1800.00, salary * 0.03 / 2);
+    }
+
+    private static double calculateTax(double salary) {
+        if (salary <= 20832) return 0;
+        if (salary <= 33333) return (salary - 20832) * 0.20;
+        if (salary <= 66667) return 2500 + (salary - 33333) * 0.25;
+        if (salary <= 166667) return 10833 + (salary - 66667) * 0.30;
+        return 40833 + (salary - 166667) * 0.32;
+    }
+
+    private static void printPayroll(String period, int empNum, String empName,
+                                     String position, LocalDate dob, String address,
+                                     String phone, String sssNum, String pagIbigNum,
+                                     String philHealthNum, String tinNum, double hours,
+                                     double gross, double riceSubsidy, double phoneAllowance,
+                                     double clothingAllowance, double sss, double philHealth,
+                                     double pagIbig, double tax) {
+        DecimalFormat df = new DecimalFormat("#,##0.00");
+        double totalDeductions = sss + philHealth + pagIbig + tax;
+        double totalAllowances = riceSubsidy + phoneAllowance + clothingAllowance;
+        double netPay = gross + totalAllowances - totalDeductions;
+
+        System.out.println("\n--- Payroll Summary ---");
+        System.out.println("Employee: " + empName + " (" + empNum + ")");
+        System.out.println("Position: " + position);
+        System.out.println("Gross Salary: ₱" + df.format(gross));
+        System.out.println("Total Allowances: ₱" + df.format(totalAllowances));
+        System.out.println("Total Deductions: ₱" + df.format(totalDeductions));
+        System.out.println("Net Pay: ₱" + df.format(netPay));
+        System.out.println("------------------------------------------");
+    }
