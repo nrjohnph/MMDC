@@ -1,0 +1,95 @@
+package com.myprofile.motorphemployeespayroll;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Scanner;
+
+public class MotorPHEmployeesPayroll {
+    public static void main(String[] args) {
+        String filePath = "src/MotorPH_Employee_Data.xlsx";
+        try (Scanner scanner = new Scanner(System.in)) {
+            System.out.print("Enter Employee Number: ");
+            int empNumberInput = scanner.nextInt();
+            
+            readEmployeeDetails(filePath, empNumberInput);
+        }
+    }
+    
+    public static void readEmployeeDetails(String filePath, int empNumberInput) {
+        try (FileInputStream fis = new FileInputStream(new File(filePath));
+             Workbook workbook = new XSSFWorkbook(fis)) {
+            
+            Sheet sheet = workbook.getSheet("Employee Details");
+            
+            if (sheet == null) {
+                System.out.println("Sheet not found.");
+                return;
+            }
+            
+            boolean found = false;
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0) continue; // Skip header row
+                
+                Cell empNumberCell = row.getCell(0);
+                if (empNumberCell == null || empNumberCell.getCellType() != CellType.NUMERIC) continue;
+                
+                int empNumber = (int) empNumberCell.getNumericCellValue();
+                
+                if (empNumber == empNumberInput) {
+                    found = true;
+                    Cell firstNameCell = row.getCell(2);
+                    Cell lastNameCell = row.getCell(1);
+                    Cell positionCell = row.getCell(11);
+                    Cell birthdayCell = row.getCell(3);
+                    Cell addressCell = row.getCell(4);
+                    Cell phoneNumberCell = row.getCell(5);
+                    
+                    System.out.println("Employee #: " + empNumber);
+                    System.out.println("Name: " + firstNameCell.getStringCellValue() + " " + lastNameCell.getStringCellValue());
+                    System.out.println("Position: " + positionCell.toString());
+                    System.out.println("Birthday: " + birthdayCell.toString());
+                    System.out.println("Address: " + addressCell.toString());
+                    System.out.println("Phone Number: " + phoneNumberCell.toString());
+                    
+                    printWholeNumber(row.getCell(6), "SSS Number");
+                    printWholeNumber(row.getCell(7), "PhilHealth Number");
+                    printWholeNumber(row.getCell(8), "TIN Number");
+                    printWholeNumber(row.getCell(9), "PagIbig Number");
+                    
+                    System.out.println("------------------------------------------");
+                    printAllowances(row);
+                    break;
+                }
+            }
+            
+            if (!found) {
+                System.out.println("Employee not found.");
+            }
+            
+        } catch (IOException e) {
+            System.out.println("Error reading file: " + e.getMessage());
+        }
+    }
+    
+    private static void printWholeNumber(Cell cell, String label) {
+        if (cell != null) {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                System.out.println(label + ": " + (long) cell.getNumericCellValue());
+            } else {
+                System.out.println(label + ": " + cell.toString());
+            }
+        }
+    }
+    
+    private static void printAllowances(Row row) {
+        System.out.println("Allowances:");
+        System.out.println("------------------------------------------");
+        System.out.println("Rice Subsidy: " + row.getCell(14).toString());
+        System.out.println("Phone Allowance: " + row.getCell(15).toString());
+        System.out.println("Clothing Allowance: " + row.getCell(16).toString());
+        System.out.println("------------------------------------------");
+    }
+}
